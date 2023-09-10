@@ -4,6 +4,7 @@ import type { HttpContextContract } from "@ioc:Adonis/Core/HttpContext";
 import { schema, rules } from "@ioc:Adonis/Core/Validator";
 import User from "App/Models/User";
 import { generateOTP } from "App/Utils/utils";
+import Env from "@ioc:Adonis/Core/Env";
 
 export default class AuthController {
   public async register({ request, routeKey }: HttpContextContract) {
@@ -57,7 +58,7 @@ export default class AuthController {
 
     await Mail.sendLater((message) => {
       message
-        .from("ngozi@stms.me")
+        .from(Env.get("EMAIL_SENDER"))
         .to(payload.email)
         .subject("Verify Email!")
         .htmlView("emails/verify", { code: otp });
