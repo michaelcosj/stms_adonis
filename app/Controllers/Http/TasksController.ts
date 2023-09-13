@@ -2,6 +2,7 @@ import type { HttpContextContract } from "@ioc:Adonis/Core/HttpContext";
 import { schema, rules } from "@ioc:Adonis/Core/Validator";
 import { DateTime } from "luxon";
 import Task from "App/Models/Task";
+import Subtask from "App/Models/SubTask";
 
 export default class TasksController {
   public async index({ auth, request }: HttpContextContract) {
@@ -81,6 +82,7 @@ export default class TasksController {
       }
 
       if (tag_match && priority_match && id_match && done_match) {
+        await task.load("subTasks");
         filtered.push(task);
         continue;
       }
@@ -96,9 +98,16 @@ export default class TasksController {
       schema: schema.create({
         name: schema.string([rules.minLength(3)]),
         tag: schema.enum(["study", "classes", "others"]),
-        time_due: schema.date(),
+        start_time: schema.date(),
+        end_time: schema.date(),
         description: schema.string.optional(),
         priority: schema.boolean.optional(),
+        sub_tasks: schema.array.optional().members(
+          schema.object().members({
+            name: schema.string([rules.minLength(3)]),
+            duration: schema.number(),
+          })
+        ),
       }),
       cacheKey: routeKey,
     });
@@ -106,11 +115,23 @@ export default class TasksController {
     const task = await Task.create({
       name: payload.name,
       tag: payload.tag.toUpperCase(),
-      timeDue: payload.time_due,
+      startTime: payload.start_time,
+      endTime: payload.end_time,
       description: payload.description || "",
       priority: payload.priority || false,
-      userId: user?.id,
     });
+
+    let subtasks: Subtask[] = [];
+    payload.sub_tasks?.forEach((v) => {
+      const subtask = new Subtask();
+      subtask.name = v.name;
+      subtask.duration = v.duration;
+      subtasks.push(subtask);
+    });
+
+    await task.related("subTasks").saveMany(subtasks);
+    await user?.related("tasks").save(task);
+    await task.load("subTasks");
 
     return { status: "success", data: { task } };
   }
@@ -132,7 +153,8 @@ export default class TasksController {
       });
     }
 
-    return { status: "success", data: { todo: task } };
+    await task.load("subTasks");
+    return { status: "success", data: { task } };
   }
 
   public async update({
@@ -148,10 +170,19 @@ export default class TasksController {
       schema: schema.create({
         name: schema.string.optional([rules.minLength(3)]),
         tag: schema.enum.optional(["study", "classes", "others"]),
-        time_due: schema.date.optional(),
+        start_time: schema.date.optional(),
+        end_time: schema.date.optional(),
         description: schema.string.optional(),
-        priority: schema.boolean.optional(),
         is_completed: schema.boolean.optional(),
+        priority: schema.boolean.optional(),
+        sub_tasks: schema.array.optional().members(
+          schema.object().members({
+            id: schema.number.optional(),
+            name: schema.string.optional([rules.minLength(3)]),
+            duration: schema.number.optional(),
+            is_completed: schema.boolean.optional(),
+          })
+        ),
       }),
       cacheKey: routeKey,
     });
@@ -169,13 +200,40 @@ export default class TasksController {
       });
     }
 
+    await task.load("subTasks");
     if (payload.is_completed) {
-      task.timeCompleted = DateTime.now();
+      task.finishTime = DateTime.now();
+      task.isCompleted = true;
     }
 
-    const updated_task = await task?.merge(payload).save();
+    if (payload.sub_tasks) {
+      let subTasksDone = 0;
+      const subTasks = task.subTasks.sort((a, b) => a.id - b.id);
 
-    return { status: "success", data: { task: updated_task } };
+      for (const v of payload.sub_tasks) {
+        for (const subTask of subTasks) {
+          if (subTask.id === v.id) {
+            await subTask.merge(v).save();
+            if (subTask.isCompleted) {
+              subTasksDone += 1;
+              console.log(subTasksDone);
+            }
+            break;
+          } else {
+            await task.related("subTasks").create(v);
+          }
+        }
+      }
+      task.percentage_complete = (subTasksDone / subTasks.length) * 100;
+      delete payload.sub_tasks;
+    }
+
+    if (payload.tag) {
+      payload.tag = payload.tag.toUpperCase();
+    }
+
+    await task?.merge(payload).save();
+    return { status: "success", data: { task } };
   }
 
   public async destroy({ auth, request }: HttpContextContract) {

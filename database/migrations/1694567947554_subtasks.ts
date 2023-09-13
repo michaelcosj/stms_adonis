@@ -1,36 +1,27 @@
 import BaseSchema from "@ioc:Adonis/Lucid/Schema";
 
 export default class extends BaseSchema {
-  protected tableName = "tasks";
+  protected tableName = "subtasks";
 
   public async up() {
     this.schema.createTable(this.tableName, (table) => {
       table.increments("id");
       table.string("name");
-      table.enum("tag", ["WORK", "STUDY", "OTHERS"], {
-        useNative: true,
-        enumName: "tag_enum",
-        existingType: false,
-      });
-      table.boolean("priority").defaultTo(false);
       table.boolean("is_completed").defaultTo(false);
-      table.string("description");
-      table.dateTime("time_due", { useTz: true });
-      table.dateTime("time_completed", { useTz: true });
+
+      table.integer("duration");
+
       table.timestamp("created_at", { useTz: true });
       table.timestamp("updated_at", { useTz: true });
       table
-        .integer("user_id")
+        .integer("task_id")
         .unsigned()
-        .references("users.id")
+        .references("tasks.id")
         .onDelete("CASCADE");
-
-      table.index(["time_due", "time_completed"]);
     });
   }
 
   public async down() {
-    this.schema.raw('DROP TYPE IF EXISTS "tag_enum"');
     this.schema.dropTable(this.tableName);
   }
 }

@@ -1,6 +1,14 @@
 import { DateTime } from "luxon";
-import { BaseModel, BelongsTo, belongsTo, column } from "@ioc:Adonis/Lucid/Orm";
+import {
+  BaseModel,
+  BelongsTo,
+  belongsTo,
+  column,
+  HasMany,
+  hasMany,
+} from "@ioc:Adonis/Lucid/Orm";
 import User from "./User";
+import Subtask from "./SubTask";
 
 export default class Task extends BaseModel {
   @column({ isPrimary: true })
@@ -19,19 +27,28 @@ export default class Task extends BaseModel {
   public isCompleted: boolean;
 
   @column()
+  public percentage_complete: Number;
+
+  @column()
   public description: string;
 
   @column.dateTime()
-  public timeDue: DateTime;
+  public startTime: DateTime;
 
   @column.dateTime()
-  public timeCompleted: DateTime;
+  public finishTime: DateTime;
+
+  @column.dateTime()
+  public endTime: DateTime;
 
   @column()
   public userId: number;
 
   @belongsTo(() => User)
   public user: BelongsTo<typeof User>;
+
+  @hasMany(() => Subtask)
+  public subTasks: HasMany<typeof Subtask>;
 
   @column.dateTime({ autoCreate: true })
   public createdAt: DateTime;

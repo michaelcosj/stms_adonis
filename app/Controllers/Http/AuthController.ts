@@ -1,5 +1,6 @@
 import Redis from "@ioc:Adonis/Addons/Redis";
 import Mail from "@ioc:Adonis/Addons/Mail";
+import Hash from "@ioc:Adonis/Core/Hash";
 import type { HttpContextContract } from "@ioc:Adonis/Core/HttpContext";
 import { schema, rules } from "@ioc:Adonis/Core/Validator";
 import User from "App/Models/User";
@@ -26,7 +27,12 @@ export default class AuthController {
     return { status: "success", data: { user: user.serialize() } };
   }
 
-  public async login({ request, routeKey, auth }: HttpContextContract) {
+  public async login({
+    request,
+    response,
+    routeKey,
+    auth,
+  }: HttpContextContract) {
     const payload = await request.validate({
       schema: schema.create({
         email: schema.string(),
@@ -35,11 +41,18 @@ export default class AuthController {
       cacheKey: routeKey,
     });
 
-    const token = await auth
-      .use("api")
-      .attempt(payload.email, payload.password);
+    // Lookup user manually
+    const user = await User.query().where("email", payload.email).firstOrFail();
 
-    return { status: "success", data: { token: token } };
+    // Verify password
+    if (!(await Hash.verify(user.password, payload.password))) {
+      return response.unauthorized("Invalid credentials");
+    }
+
+    // Generate token
+    const token = await auth.use("api").generate(user);
+
+    return { status: "success", data: { token: token.token, user } };
   }
 
   public async startVerification({ request, routeKey }: HttpContextContract) {
